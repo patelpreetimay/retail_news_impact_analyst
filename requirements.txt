@@ -2,9 +2,12 @@ feedparser
 requests
 beautifulsoup4
 pandas
+numpy
 lxml
 streamlit
 plotly
 scikit-learn
 joblib
 matplotlib
+nltk
+spacy

@@ -59,12 +59,15 @@ WEIGHT_MATERIALITY = 0.3
 
 # Source reliability scores (0.0 – 1.0)
 SOURCE_CREDIBILITY = {
-    "reuters":          0.95,
-    "financial times":  0.92,
-    "cnbc":             0.90,
-    "marketwatch":      0.88,
-    "yahoo finance":    0.85,
-    "investing.com":    0.80,
+    "reuters":               0.95,
+    "wall street journal":   0.94,
+    "wsj":                   0.94,
+    "bloomberg":             0.93,
+    "financial times":       0.92,
+    "cnbc":                  0.90,
+    "marketwatch":           0.88,
+    "yahoo finance":         0.85,
+    "investing.com":         0.80,
 }
 
 # Default credibility for unknown sources

@@ -47,41 +47,72 @@ logger = logging.getLogger(__name__)
 # ===========================================================================
 
 # Each event type maps to a list of keywords.
-# The FIRST matching category wins (order = priority).
-EVENT_KEYWORDS = {
+# The category with the MOST keyword matches wins (scoring-based).
+EVENT_KEYWORDS: dict[str, list[str]] = {
     "earnings": [
-        "earnings", "revenue", "quarterly", "results", "profit",
+        "earnings", "revenue", "quarterly results", "profit", "guidance",
         "eps", "fiscal", "income", "dividend", "financial results",
+        "net income", "operating income", "gross margin", "beat estimates",
+        "missed estimates", "quarterly earnings", "annual report",
+        "earnings per share", "revenue growth", "profit margin",
     ],
     "leadership_change": [
-        "ceo", "cfo", "resignation", "appointed", "executive",
-        "chairman", "board of directors", "stepping down", "hire",
+        "ceo", "cfo", "coo", "cto", "resignation", "appointed",
+        "leadership", "executive", "chairman", "board of directors",
+        "stepping down", "hire", "successor", "interim chief",
+        "management shakeup", "new president", "chief executive",
+        "executive departure", "board member", "named as",
     ],
     "regulatory_action": [
-        "regulator", "sec", "investigation", "fine", "compliance",
-        "regulation", "federal reserve", "antitrust", "sanction",
+        "regulator", "sec", "investigation", "compliance", "regulation",
+        "federal reserve", "antitrust", "sanction", "enforcement",
+        "regulatory approval", "policy change", "fine", "penalty",
+        "fda approval", "ftc", "regulatory filing", "central bank",
+        "rate decision", "interest rate", "government intervention",
     ],
     "mergers_acquisitions": [
-        "merger", "acquire", "acquisition", "takeover", "buyout",
-        "deal", "stake", "consolidation", "joint venture",
+        "merger", "acquisition", "takeover", "buyout", "deal",
+        "stake", "consolidation", "joint venture", "acquire",
+        "bid", "offer to buy", "purchase agreement", "divestiture",
+        "spin-off", "hostile takeover", "friendly merger",
+        "all-stock deal", "cash deal", "combined entity",
     ],
     "legal_action": [
         "lawsuit", "court", "settlement", "litigation", "sue",
-        "ruling", "verdict", "penalty", "fraud",
+        "ruling", "verdict", "penalty", "fraud", "legal dispute",
+        "class action", "indictment", "plea deal", "injunction",
+        "patent infringement", "antitrust lawsuit", "regulatory fine",
+        "criminal charges", "wrongful termination", "defamation",
     ],
     "product_announcement": [
         "launch", "release", "unveil", "product", "innovation",
         "patent", "prototype", "rollout", "new feature",
+        "product launch", "new model", "next generation",
+        "product line", "product reveal", "software update",
+        "hardware release", "beta launch", "product roadmap",
     ],
     "market_movement": [
-        "market outlook", "industry trend", "stock market",
+        "market outlook", "industry trend", "stock market", "sector trend",
         "trading", "index", "rally", "sell-off", "volatility",
-        "bull", "bear", "wall street",
+        "bull market", "bear market", "wall street", "market cap",
+        "downturn", "recovery", "correction", "all-time high",
+        "market sentiment", "investor confidence", "economic indicator",
     ],
 }
 
-# Default event type if no keywords match
+# Default event type if no keywords match at all
 DEFAULT_EVENT = "market_movement"
+
+# Priority order for tie-breaking (lower index = higher priority)
+EVENT_PRIORITY = [
+    "mergers_acquisitions",
+    "leadership_change",
+    "legal_action",
+    "regulatory_action",
+    "product_announcement",
+    "earnings",
+    "market_movement",
+]
 
 
 # ===========================================================================
@@ -107,7 +138,12 @@ NEGATIVE_KEYWORDS = [
 
 def detect_event_type(text: str) -> str:
     """
-    Detect the financial event type from article text using keyword matching.
+    Detect the financial event type using **scoring-based** keyword matching.
+
+    Counts keyword hits for EVERY category and picks the one with the
+    highest score.  If two or more categories are tied, the one appearing
+    earlier in ``EVENT_PRIORITY`` wins.  If no keywords match at all, the
+    function falls back to ``DEFAULT_EVENT`` (``"market_movement"``).
 
     Parameters
     ----------
@@ -124,12 +160,30 @@ def detect_event_type(text: str) -> str:
 
     text_lower = text.lower()
 
+    # Count keyword matches for every category
+    scores: dict[str, int] = {}
     for event_type, keywords in EVENT_KEYWORDS.items():
-        for keyword in keywords:
-            if keyword in text_lower:
-                return event_type
+        score = sum(1 for kw in keywords if kw in text_lower)
+        scores[event_type] = score
 
-    return DEFAULT_EVENT
+    max_score = max(scores.values())
+
+    # No keywords matched → fall back to default
+    if max_score == 0:
+        return DEFAULT_EVENT
+
+    # Collect all categories that achieved the max score
+    top_categories = [cat for cat, s in scores.items() if s == max_score]
+
+    # Tie-break using the priority list
+    if len(top_categories) == 1:
+        return top_categories[0]
+
+    for cat in EVENT_PRIORITY:
+        if cat in top_categories:
+            return cat
+
+    return top_categories[0]
 
 
 def detect_stance(text: str) -> str:

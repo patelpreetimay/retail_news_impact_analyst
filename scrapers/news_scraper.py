@@ -6,9 +6,20 @@ Collects financial news articles from multiple RSS feeds, extracts full
 article text, removes duplicates, and saves the dataset as a CSV file.
 
 RSS Sources:
-    - Reuters Business News
-    - Yahoo Finance Top Stories
-    - CNBC Top Stories
+    - Reuters Business / Markets / Technology / Company News
+    - Yahoo Finance Top Stories / Market News / Industry
+    - CNBC Top News / Markets
+    - MarketWatch Top Stories / Market Pulse
+    - Investing.com News / Stock Market
+    - Financial Times Home / Companies
+    - Bloomberg (ETF Report)
+    - Wall Street Journal Markets
+
+Incremental Dataset:
+    - Appends new articles to existing dataset
+    - Deduplicates by URL
+    - Maintains a rolling cap of MAX_DATASET_SIZE (10,000) rows
+    - Trims oldest rows first when the cap is exceeded
 
 Output:
     data/raw_news/news_raw_dataset.csv
@@ -56,10 +67,17 @@ RSS_FEEDS = [
     # Financial Times
     ("Financial Times", "https://www.ft.com/rss/home"),
     ("Financial Times", "https://www.ft.com/rss/companies"),
+    # Bloomberg
+    ("Bloomberg", "https://www.bloomberg.com/feed/podcast/etf-report.xml"),
+    # Wall Street Journal
+    ("Wall Street Journal", "https://feeds.a.dj.com/rss/RSSMarketsMain.xml"),
 ]
 
 # Maximum number of articles to collect
 MAX_ARTICLES = 2000
+
+# Maximum rolling dataset size — oldest rows are trimmed when exceeded
+MAX_DATASET_SIZE = 10000
 
 # Output path (relative to the project root)
 OUTPUT_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "raw_news")
@@ -320,29 +338,121 @@ def collect_news(max_articles: int = MAX_ARTICLES) -> pd.DataFrame:
 
 
 def main():
-    """Run the news collection pipeline and save results to CSV."""
+    """
+    Run the news collection pipeline and save results to CSV.
+
+    Global deduplication behaviour:
+        - If the output CSV already exists, new articles are **appended**.
+        - **Primary dedup**: duplicates removed based on the ``url`` column.
+        - **Fallback dedup**: for rows with missing URLs, duplicates are
+          removed based on ``headline`` + ``timestamp``.
+        - The dataset is sorted by ``timestamp`` (newest first).
+        - If the total exceeds ``MAX_DATASET_SIZE`` (10,000), the oldest
+          rows are trimmed so the final size equals ``MAX_DATASET_SIZE``.
+    """
     logger.info("=" * 60)
     logger.info("RNIA — News Scraper Started")
     logger.info("=" * 60)
 
-    # Collect articles
-    df = collect_news(max_articles=MAX_ARTICLES)
+    # Collect new articles from RSS feeds
+    df_new = collect_news(max_articles=MAX_ARTICLES)
+    new_count = len(df_new)
 
     # Ensure output directory exists
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-    # Save to CSV
-    df.to_csv(OUTPUT_FILE, index=False, encoding="utf-8-sig")
-    logger.info("Dataset saved to: %s", OUTPUT_FILE)
-    logger.info("Total articles collected: %d", len(df))
+    # ------------------------------------------------------------------
+    # STEP 1 & 2 — Load existing dataset and combine with new data
+    # ------------------------------------------------------------------
+    existing_count = 0
+    if os.path.isfile(OUTPUT_FILE):
+        df_existing = pd.read_csv(OUTPUT_FILE, encoding="utf-8-sig")
+        existing_count = len(df_existing)
+        logger.info("Existing dataset loaded: %d rows", existing_count)
 
-    # Summary statistics
+        # Combine old + new
+        df_merged = pd.concat([df_existing, df_new], ignore_index=True)
+    else:
+        logger.info("No existing dataset found — starting fresh.")
+        df_merged = df_new.copy()
+
+    combined_count = len(df_merged)
+
+    # ------------------------------------------------------------------
+    # STEP 3 — Global deduplication
+    # ------------------------------------------------------------------
+
+    # Primary dedup: by URL (keep first / oldest occurrence)
+    before_url_dedup = len(df_merged)
+    df_merged = df_merged.drop_duplicates(subset="url", keep="first")
+    url_dupes_removed = before_url_dedup - len(df_merged)
+
+    # Fallback dedup: for rows where URL may be missing/empty,
+    # deduplicate by headline + timestamp combination
+    before_fallback_dedup = len(df_merged)
+    df_merged = df_merged.drop_duplicates(
+        subset=["headline", "timestamp"], keep="first"
+    )
+    fallback_dupes_removed = before_fallback_dedup - len(df_merged)
+
+    total_dupes_removed = url_dupes_removed + fallback_dupes_removed
+
+    # ------------------------------------------------------------------
+    # STEP 4 — Sort by timestamp (newest first)
+    # ------------------------------------------------------------------
+    df_merged["timestamp"] = pd.to_datetime(
+        df_merged["timestamp"], errors="coerce"
+    )
+    df_merged = df_merged.sort_values(
+        by="timestamp", ascending=False, na_position="last"
+    ).reset_index(drop=True)
+
+    # ------------------------------------------------------------------
+    # STEP 5 — Enforce rolling dataset size cap
+    # ------------------------------------------------------------------
+    rows_trimmed = 0
+    if len(df_merged) > MAX_DATASET_SIZE:
+        rows_trimmed = len(df_merged) - MAX_DATASET_SIZE
+        df_merged = df_merged.head(MAX_DATASET_SIZE).reset_index(drop=True)
+
+    final_count = len(df_merged)
+
+    # ------------------------------------------------------------------
+    # STEP 6 — Save the final deduplicated, sorted dataset
+    # ------------------------------------------------------------------
+    df_merged.to_csv(OUTPUT_FILE, index=False, encoding="utf-8-sig")
+
+    # ------------------------------------------------------------------
+    # STEP 7 — Detailed logging summary
+    # ------------------------------------------------------------------
+    print("\n" + "=" * 60)
+    print("GLOBAL DEDUPLICATION SUMMARY")
+    print("=" * 60)
+    print(f"  Existing dataset       : {existing_count}")
+    print(f"  New scraped articles   : {new_count}")
+    print(f"  Combined (before dedup): {combined_count}")
+    print(f"  Duplicates removed     : {total_dupes_removed}")
+    if url_dupes_removed:
+        print(f"    ├─ by URL            : {url_dupes_removed}")
+    if fallback_dupes_removed:
+        print(f"    └─ by headline+time  : {fallback_dupes_removed}")
+    if rows_trimmed:
+        print(f"  Oldest rows trimmed    : {rows_trimmed}")
+    print(f"  Final dataset size     : {final_count}")
+    print(f"  Saved to               : {OUTPUT_FILE}")
+    print("=" * 60)
+
+    logger.info("Dataset saved to: %s", OUTPUT_FILE)
+    logger.info("Final dataset size: %d articles", final_count)
+
+    # Articles per source
     logger.info("-" * 40)
     logger.info("Articles per source:")
-    for source, count in df["source"].value_counts().items():
+    for source, count in df_merged["source"].value_counts().items():
         logger.info("  %s: %d", source, count)
     logger.info("=" * 60)
 
 
 if __name__ == "__main__":
     main()
+

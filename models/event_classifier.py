@@ -86,7 +86,6 @@ class EventClassifierLR:
         )
         self.classifier = LogisticRegression(
             max_iter=1000,           # Ensure convergence
-            multi_class="multinomial",
             solver="lbfgs",
             C=1.0,                   # Regularisation strength
             random_state=42,
