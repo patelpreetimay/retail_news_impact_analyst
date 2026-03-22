@@ -12,7 +12,7 @@ Output:
     data/labeled_dataset/financial_news_labeled.csv
 
 Columns:
-    headline, clean_text, event_type, stance, source, timestamp, url
+    headline, clean_text, event_type, stance, source, timestamp, url, region
 """
 
 import os
@@ -47,41 +47,198 @@ logger = logging.getLogger(__name__)
 # ===========================================================================
 
 # Each event type maps to a list of keywords.
-# The FIRST matching category wins (order = priority).
-EVENT_KEYWORDS = {
+# The category with the MOST keyword matches wins (scoring-based).
+EVENT_KEYWORDS: dict[str, list[str]] = {
     "earnings": [
-        "earnings", "revenue", "quarterly", "results", "profit",
+        # Core earnings terms
+        "earnings", "revenue", "quarterly results", "profit", "guidance",
         "eps", "fiscal", "income", "dividend", "financial results",
+        "net income", "operating income", "gross margin", "beat estimates",
+        "missed estimates", "quarterly earnings", "annual report",
+        "earnings per share", "revenue growth", "profit margin",
+        # Extended earnings vocabulary
+        "top line", "bottom line", "ebitda", "operating profit",
+        "same-store sales", "comp sales", "sales growth", "revenue miss",
+        "revenue beat", "profit warning", "earnings surprise",
+        "earnings miss", "earnings beat", "fiscal year", "fiscal quarter",
+        "q1 results", "q2 results", "q3 results", "q4 results",
+        "annual results", "half-year results", "full-year results",
+        "reported revenue", "reported earnings", "reported profit",
+        "net profit", "gross profit", "operating margin",
+        "profit after tax", "profit before tax", "return on equity",
+        "earnings outlook", "revenue outlook", "sales forecast",
+        "raised guidance", "lowered guidance", "reaffirmed guidance",
+        "beat expectations", "missed expectations", "exceeded estimates",
+        "fell short", "above consensus", "below consensus",
+        "dividend payout", "dividend yield", "share buyback",
+        "stock repurchase", "cash flow", "free cash flow",
     ],
     "leadership_change": [
-        "ceo", "cfo", "resignation", "appointed", "executive",
-        "chairman", "board of directors", "stepping down", "hire",
+        # Core leadership terms
+        "ceo", "cfo", "coo", "cto", "resignation", "appointed",
+        "leadership", "executive", "chairman", "board of directors",
+        "stepping down", "hire", "successor", "interim chief",
+        "management shakeup", "new president", "chief executive",
+        "executive departure", "board member", "named as",
+        # Extended leadership vocabulary
+        "managing director", "vice president", "senior vice president",
+        "chief operating officer", "chief financial officer",
+        "chief technology officer", "chief marketing officer",
+        "board reshuffle", "boardroom", "executive team",
+        "c-suite", "top management", "new leadership",
+        "leadership transition", "ceo transition", "ousted",
+        "fired", "terminated", "replaced", "new ceo",
+        "new cfo", "incoming ceo", "outgoing ceo",
+        "co-founder", "founder steps down", "promoter",
+        "independent director", "non-executive director",
+        "management change", "new appointment", "key appointment",
     ],
     "regulatory_action": [
-        "regulator", "sec", "investigation", "fine", "compliance",
-        "regulation", "federal reserve", "antitrust", "sanction",
+        # Core regulatory terms
+        "regulator", "sec", "investigation", "compliance", "regulation",
+        "federal reserve", "antitrust", "sanction", "enforcement",
+        "regulatory approval", "policy change", "fine", "penalty",
+        "fda approval", "ftc", "regulatory filing", "central bank",
+        "rate decision", "interest rate", "government intervention",
+        # Extended regulatory vocabulary
+        "regulatory crackdown", "regulatory scrutiny", "deregulation",
+        "new regulation", "proposed regulation", "rule change",
+        "congressional hearing", "senate hearing", "legislation",
+        "executive order", "trade policy", "tariff", "import duty",
+        "export ban", "trade war", "trade restriction", "subsidy",
+        "tax reform", "tax cut", "tax hike", "stimulus",
+        "bailout", "quantitative easing", "rate hike", "rate cut",
+        "inflation target", "price control", "price cap",
+        "environmental regulation", "emissions standard",
+        "data privacy", "gdpr", "antitrust probe", "monopoly",
+        "market manipulation", "insider trading probe",
+        # India-specific regulators
+        "sebi", "rbi", "reserve bank of india", "nse", "bse",
+        "irdai", "repo rate", "monetary policy", "fiscal policy",
+        "gst", "union budget", "niti aayog", "crr", "slr",
+        "reverse repo", "statutory liquidity", "cash reserve ratio",
+        "sebi order", "rbi circular", "rbi policy",
+        "trai", "cci", "competition commission",
+        "ministry of finance", "finance ministry",
     ],
     "mergers_acquisitions": [
-        "merger", "acquire", "acquisition", "takeover", "buyout",
-        "deal", "stake", "consolidation", "joint venture",
+        # Core M&A terms
+        "merger", "acquisition", "takeover", "buyout", "deal",
+        "stake", "consolidation", "joint venture", "acquire",
+        "bid", "offer to buy", "purchase agreement", "divestiture",
+        "spin-off", "hostile takeover", "friendly merger",
+        "all-stock deal", "cash deal", "combined entity",
+        # Extended M&A vocabulary
+        "leveraged buyout", "lbo", "management buyout", "mbo",
+        "acquirer", "target company", "merger agreement",
+        "definitive agreement", "letter of intent", "due diligence",
+        "synergy", "synergies", "cost synergies", "revenue synergies",
+        "strategic acquisition", "bolt-on acquisition", "tuck-in",
+        "majority stake", "minority stake", "controlling stake",
+        "share swap", "equity swap", "tender offer",
+        "open offer", "delisting", "going private",
+        "breakup fee", "termination fee", "anti-dilution",
+        "strategic partnership", "strategic alliance",
+        "asset sale", "asset purchase", "carve-out",
+        "reverse merger", "special purpose acquisition", "spac",
+        "merger of equals", "absorbed by", "merged with",
+        "acquired by", "to acquire", "agreed to buy",
+        "buying spree", "deal value", "enterprise value",
     ],
     "legal_action": [
+        # Core legal terms
         "lawsuit", "court", "settlement", "litigation", "sue",
-        "ruling", "verdict", "penalty", "fraud",
+        "ruling", "verdict", "penalty", "fraud", "legal dispute",
+        "class action", "indictment", "plea deal", "injunction",
+        "patent infringement", "antitrust lawsuit", "regulatory fine",
+        "criminal charges", "wrongful termination", "defamation",
+        # Extended legal vocabulary
+        "sued", "suing", "filed suit", "legal proceedings",
+        "court order", "court ruling", "judge ruled", "jury",
+        "appeal", "appellate", "supreme court", "high court",
+        "tribunal", "arbitration", "mediation", "legal battle",
+        "legal challenge", "legal claim", "damages",
+        "compensatory damages", "punitive damages", "restitution",
+        "consent decree", "cease and desist", "restraining order",
+        "securities fraud", "accounting fraud", "wire fraud",
+        "embezzlement", "bribery", "corruption", "money laundering",
+        "whistleblower", "class action lawsuit", "shareholder lawsuit",
+        "derivative action", "breach of contract", "copyright",
+        "trademark", "intellectual property", "trade secret",
+        "insider trading", "market manipulation",
+        "guilty plea", "not guilty", "convicted", "acquitted",
+        "sentenced", "probation", "prison",
     ],
     "product_announcement": [
+        # Core product terms
         "launch", "release", "unveil", "product", "innovation",
         "patent", "prototype", "rollout", "new feature",
+        "product launch", "new model", "next generation",
+        "product line", "product reveal", "software update",
+        "hardware release", "beta launch", "product roadmap",
+        # Extended product vocabulary
+        "launched", "unveiled", "introduced", "announced",
+        "new product", "new service", "new platform",
+        "new version", "upgrade", "redesign", "revamp",
+        "flagship product", "flagship device", "flagship model",
+        "research and development", "r&d", "clinical trial",
+        "fda clearance", "drug approval", "pipeline drug",
+        "phase 1", "phase 2", "phase 3", "clinical data",
+        "breakthrough", "disruptive", "cutting-edge",
+        "artificial intelligence", "machine learning",
+        "electric vehicle", "ev launch", "autonomous",
+        "5g", "cloud computing", "saas", "platform update",
+        "app launch", "marketplace", "subscription service",
+        "expansion", "new market", "entered the market",
+        "technology partnership", "tech stack",
     ],
     "market_movement": [
-        "market outlook", "industry trend", "stock market",
+        # Core market terms
+        "market outlook", "industry trend", "stock market", "sector trend",
         "trading", "index", "rally", "sell-off", "volatility",
-        "bull", "bear", "wall street",
+        "bull market", "bear market", "wall street", "market cap",
+        "downturn", "recovery", "correction", "all-time high",
+        "market sentiment", "investor confidence", "economic indicator",
+        # Extended market vocabulary
+        "stock price", "share price", "stock surged", "stock plunged",
+        "stock jumped", "stock fell", "stock dropped", "stock rose",
+        "stocks rally", "stocks tumble", "stocks soar", "stocks sink",
+        "market rally", "market crash", "market correction",
+        "trading volume", "market volatility", "vix",
+        "futures", "options", "derivatives", "short selling",
+        "margin call", "circuit breaker", "trading halt",
+        "ipo", "initial public offering", "secondary offering",
+        "follow-on offering", "block deal", "bulk deal",
+        "52-week high", "52-week low", "new high", "new low",
+        "market breadth", "advance-decline", "market turnover",
+        "sector rotation", "flight to safety", "risk-on", "risk-off",
+        "yield curve", "treasury", "bond market", "fixed income",
+        "commodity", "crude oil", "gold price", "oil price",
+        "forex", "currency", "dollar index", "rupee",
+        "gdp", "unemployment", "inflation", "cpi", "pmi",
+        "consumer confidence", "retail sales", "manufacturing",
+        "recession", "stagflation", "soft landing", "hard landing",
+        # India-specific market terms
+        "sensex", "nifty", "nifty 50", "bank nifty", "dalal street",
+        "fii", "dii", "midcap", "smallcap", "largecap",
+        "nifty it", "nifty bank", "nifty pharma", "nifty auto",
+        "opening bell", "closing bell", "pre-market", "after-hours",
     ],
 }
 
-# Default event type if no keywords match
+# Default event type if no keywords match at all
 DEFAULT_EVENT = "market_movement"
+
+# Priority order for tie-breaking (lower index = higher priority)
+EVENT_PRIORITY = [
+    "mergers_acquisitions",
+    "leadership_change",
+    "legal_action",
+    "regulatory_action",
+    "product_announcement",
+    "earnings",
+    "market_movement",
+]
 
 
 # ===========================================================================
@@ -89,15 +246,45 @@ DEFAULT_EVENT = "market_movement"
 # ===========================================================================
 
 POSITIVE_KEYWORDS = [
+    # Core positive
     "growth", "strong", "record", "surge", "positive",
     "gain", "rise", "boost", "upbeat", "beat", "exceed",
     "optimistic", "upgrade", "outperform", "bullish",
+    # Extended positive
+    "soar", "rally", "jumped", "surged", "climbed",
+    "robust", "stellar", "impressive", "exceeded expectations",
+    "beat estimates", "above consensus", "raised guidance",
+    "upside", "breakout", "momentum", "recovery",
+    "expanded", "improved", "higher", "increased",
+    "profit growth", "revenue growth", "strong demand",
+    "record high", "all-time high", "new high",
+    "outperformed", "topped estimates", "better than expected",
+    "accelerated", "thriving", "booming", "flourishing",
+    "dividend hike", "raised dividend", "buyback",
+    "upgrade", "buy rating", "overweight", "accumulate",
+    "opportunity", "confidence", "encouraging", "promising",
 ]
 
 NEGATIVE_KEYWORDS = [
+    # Core negative
     "loss", "decline", "drop", "weak", "lawsuit",
     "fall", "cut", "downgrade", "miss", "crash",
     "warning", "risk", "concern", "bearish", "slump",
+    # Extended negative
+    "plunge", "tumble", "sank", "plummeted", "collapsed",
+    "disappointing", "missed estimates", "below consensus",
+    "lowered guidance", "profit warning", "revenue miss",
+    "downside", "selloff", "sell-off", "correction",
+    "contracted", "deteriorated", "lower", "decreased",
+    "deficit", "debt", "bankruptcy", "default", "insolvency",
+    "layoffs", "job cuts", "restructuring", "cost-cutting",
+    "underperform", "sell rating", "underweight", "reduce",
+    "fraud", "scandal", "investigation", "probe",
+    "penalty", "fine", "violation", "breach",
+    "recession", "downturn", "slowdown", "stagnation",
+    "threat", "uncertainty", "headwind", "pressure",
+    "negative outlook", "credit downgrade", "junk status",
+    "worst", "lowest", "record low", "crisis",
 ]
 
 
@@ -107,7 +294,12 @@ NEGATIVE_KEYWORDS = [
 
 def detect_event_type(text: str) -> str:
     """
-    Detect the financial event type from article text using keyword matching.
+    Detect the financial event type using **scoring-based** keyword matching.
+
+    Counts keyword hits for EVERY category and picks the one with the
+    highest score.  If two or more categories are tied, the one appearing
+    earlier in ``EVENT_PRIORITY`` wins.  If no keywords match at all, the
+    function falls back to ``DEFAULT_EVENT`` (``"market_movement"``).
 
     Parameters
     ----------
@@ -124,12 +316,30 @@ def detect_event_type(text: str) -> str:
 
     text_lower = text.lower()
 
+    # Count keyword matches for every category
+    scores: dict[str, int] = {}
     for event_type, keywords in EVENT_KEYWORDS.items():
-        for keyword in keywords:
-            if keyword in text_lower:
-                return event_type
+        score = sum(1 for kw in keywords if kw in text_lower)
+        scores[event_type] = score
 
-    return DEFAULT_EVENT
+    max_score = max(scores.values())
+
+    # No keywords matched → fall back to default
+    if max_score == 0:
+        return DEFAULT_EVENT
+
+    # Collect all categories that achieved the max score
+    top_categories = [cat for cat, s in scores.items() if s == max_score]
+
+    # Tie-break using the priority list
+    if len(top_categories) == 1:
+        return top_categories[0]
+
+    for cat in EVENT_PRIORITY:
+        if cat in top_categories:
+            return cat
+
+    return top_categories[0]
 
 
 def detect_stance(text: str) -> str:
@@ -208,7 +418,12 @@ def auto_label_dataset(
     df["stance"] = df["clean_text"].apply(detect_stance)
 
     # Keep only the required columns
-    output_columns = ["headline", "clean_text", "event_type", "stance", "source", "timestamp", "url"]
+    output_columns = [
+        "headline", "clean_text", "event_type", "stance",
+        "source", "timestamp", "url", "region", "relevance",
+    ]
+    # Keep only columns that exist (backward compat for older datasets)
+    output_columns = [c for c in output_columns if c in df.columns]
     df = df[output_columns]
 
     # Save
