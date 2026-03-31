@@ -1,3 +1,3 @@
 ﻿model_name,accuracy,precision,recall,f1_score
-Event Classifier,0.6,0.36,0.6,0.45
-Stance Detector,0.5333,0.4333,0.5333,0.4111
+Event Classifier,0.877,0.888,0.877,0.8798
+Stance Detector,0.8307,0.8305,0.8307,0.8304

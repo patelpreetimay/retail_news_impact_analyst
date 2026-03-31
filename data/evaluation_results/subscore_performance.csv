@@ -1,0 +1,6 @@
+﻿score_name,weight,mae,rmse,r2,n_test_samples
+materiality,0.4,0.0601,0.0831,0.2906,561
+market_linkage,0.3,0.0568,0.0766,0.3544,561
+time_sensitivity,0.2,0.0441,0.0698,0.1881,561
+credibility,0.1,0.0105,0.0262,0.0209,561
+impact_score,1.0,0.0407,0.0581,0.2578,561
