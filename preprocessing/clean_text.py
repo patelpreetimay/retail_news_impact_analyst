@@ -17,15 +17,23 @@ Output:
     data/processed_news/news_clean_dataset.csv
 
 Columns:
-    headline, article_text, clean_text, source, timestamp, url
+    headline, article_text, clean_text, source, timestamp, url, region
 """
 
 import os
+import sys
 import re
 import logging
 
 import pandas as pd
 from bs4 import BeautifulSoup
+
+# Ensure project root on sys.path for package imports
+_BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _BASE_DIR not in sys.path:
+    sys.path.insert(0, _BASE_DIR)
+
+from preprocessing.relevance_filter import is_relevant
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -148,8 +156,40 @@ def main():
     if dropped:
         logger.info("Dropped %d articles with empty cleaned text.", dropped)
 
+    # --- RNIA Step 1 — Relevance Filter -------------------------------------
+    # Drop sports / entertainment / non-financial articles before they reach
+    # the event classifier. Keeps only articles with real economic / market
+    # impact, per the RNIA system spec.
+    logger.info("Applying RNIA relevance filter...")
+    before_rel = len(df)
+    relevance = df.apply(
+        lambda row: is_relevant(str(row.get("headline", "")), str(row.get("clean_text", ""))),
+        axis=1,
+    )
+    df["relevance"] = relevance.apply(lambda t: "RELEVANT" if t[0] else "IRRELEVANT")
+    df["relevance_reason"] = relevance.apply(lambda t: t[1])
+
+    dropped_irrelevant = (df["relevance"] == "IRRELEVANT").sum()
+    if dropped_irrelevant:
+        # Log a few examples for transparency
+        sample = df.loc[df["relevance"] == "IRRELEVANT", ["headline", "relevance_reason"]].head(5)
+        for _, r in sample.iterrows():
+            logger.info("  drop: %s — %s", str(r["headline"])[:90], r["relevance_reason"])
+
+    df = df[df["relevance"] == "RELEVANT"].reset_index(drop=True)
+    logger.info(
+        "Relevance filter: kept %d / %d articles (dropped %d).",
+        len(df), before_rel, dropped_irrelevant,
+    )
+
     # --- Reorder columns -----------------------------------------------------
-    column_order = ["headline", "article_text", "clean_text", "source", "timestamp", "url"]
+    column_order = [
+        "headline", "article_text", "clean_text",
+        "source", "timestamp", "url", "region",
+        "relevance",  # carried through so backend can filter defensively
+    ]
+    # Keep only columns that exist (backward compat for older datasets)
+    column_order = [c for c in column_order if c in df.columns]
     df = df[column_order]
 
     # --- Save ----------------------------------------------------------------
