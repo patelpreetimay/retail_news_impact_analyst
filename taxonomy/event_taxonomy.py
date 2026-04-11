@@ -5,7 +5,7 @@ event_taxonomy.py — Financial Event Taxonomy for RNIA
 Defines the standard event categories and stance labels used throughout
 the Event-Driven Retail News Impact Analyst system.
 
-Event Categories (7):
+Event Categories (7 — consolidated from V2 9-class taxonomy):
     1  Earnings
     2  Leadership_Change
     3  Regulatory_Action
@@ -14,8 +14,8 @@ Event Categories (7):
     6  Product_Announcement
     7  Market_Movement
 
-Stance Labels:
-    positive, negative, neutral
+Stance Labels (4 — market-oriented):
+    bullish, bearish, neutral, mixed
 """
 
 # ---------------------------------------------------------------------------
@@ -32,14 +32,66 @@ EVENT_CATEGORIES: dict[int, str] = {
     7: "Market_Movement",
 }
 
+# Legacy 9-class → 7-class collapse mapping (applied at training time)
+EVENT_COLLAPSE: dict[str, str] = {
+    "Macroeconomic_Geopolitical": "Market_Movement",
+    "Market_Sentiment_Investor_Action": "Market_Movement",
+    "Other": "Market_Movement",
+}
+
+# Canonical lowercase set for quick validation
+EVENT_CATEGORY_SET = {v.lower() for v in EVENT_CATEGORIES.values()}
+
 # ---------------------------------------------------------------------------
-# Stance Labels
+# Stance Labels (3-class — mixed collapsed into neutral for training)
 # ---------------------------------------------------------------------------
 
 STANCE_LABELS: dict[int, str] = {
-    1: "positive",
-    2: "negative",
+    1: "bullish",
+    2: "bearish",
     3: "neutral",
+}
+
+STANCE_LABEL_SET = {v for v in STANCE_LABELS.values()}
+
+# ---------------------------------------------------------------------------
+# Human-readable display names (for UI / explanation generator)
+# ---------------------------------------------------------------------------
+
+EVENT_DISPLAY_NAMES: dict[str, str] = {
+    "Earnings":                          "Earnings & Financial Results",
+    "Leadership_Change":                 "Leadership Change",
+    "Regulatory_Action":                 "Regulatory Action",
+    "Mergers_Acquisitions":              "Mergers & Acquisitions",
+    "Legal_Action":                      "Legal Action",
+    "Product_Announcement":              "Product Announcement",
+    "Market_Movement":                   "Market Movement",
+}
+
+# ---------------------------------------------------------------------------
+# V2 → Frontend mapping (used by backend/app.py)
+# ---------------------------------------------------------------------------
+
+V2_TO_FRONTEND_EVENT = {
+    "Earnings":                          "earnings",
+    "Mergers_Acquisitions":              "ma",
+    "Regulatory_Action":                 "regulatory",
+    "Leadership_Change":                 "leadership",
+    "Legal_Action":                      "legal",
+    "Product_Announcement":              "product",
+    "Market_Movement":                   "market",
+    # Legacy compat — in case old DB rows still have the 9-class labels
+    "Macroeconomic_Geopolitical":        "market",
+    "Market_Sentiment_Investor_Action":  "market",
+    "Other":                             "market",
+    "Unclassified":                      "market",
+}
+
+V2_TO_FRONTEND_STANCE = {
+    "bullish":  "bullish",
+    "bearish":  "bearish",
+    "neutral":  "neutral",
+    "mixed":    "neutral",   # legacy compat — collapsed at training time
 }
 
 # ---------------------------------------------------------------------------
@@ -81,13 +133,12 @@ def validate_event_category(label: str) -> bool:
 
     Example
     -------
-    >>> validate_event_category("Earnings")
+    >>> validate_event_category('Earnings')
     True
-    >>> validate_event_category("Unknown")
+    >>> validate_event_category('Unknown')
     False
     """
-    valid = {v.lower() for v in EVENT_CATEGORIES.values()}
-    return label.strip().lower() in valid
+    return label.strip().lower() in EVENT_CATEGORY_SET
 
 
 def validate_stance(label: str) -> bool:
@@ -97,7 +148,7 @@ def validate_stance(label: str) -> bool:
     Parameters
     ----------
     label : str
-        Stance label to validate (e.g. "positive", "Neutral").
+        Stance label to validate (e.g. "bullish", "Neutral").
 
     Returns
     -------
@@ -106,13 +157,12 @@ def validate_stance(label: str) -> bool:
 
     Example
     -------
-    >>> validate_stance("positive")
+    >>> validate_stance('bullish')
     True
-    >>> validate_stance("unknown")
+    >>> validate_stance('bad')
     False
     """
-    valid = {v.lower() for v in STANCE_LABELS.values()}
-    return label.strip().lower() in valid
+    return label.strip().lower() in STANCE_LABEL_SET
 
 
 def get_stance_labels() -> dict[int, str]:
@@ -122,7 +172,7 @@ def get_stance_labels() -> dict[int, str]:
     Returns
     -------
     dict[int, str]
-        Mapping of numeric ID → stance label, e.g. {1: "positive", …}.
+        Mapping of numeric ID → stance label, e.g. {1: "bullish", …}.
     """
     return STANCE_LABELS.copy()
 
@@ -142,7 +192,8 @@ if __name__ == "__main__":
 
     # Validation demos
     print("\nValidation tests:")
-    print(f"  validate_event_category('Earnings')    → {validate_event_category('Earnings')}")
-    print(f"  validate_event_category('unknown')      → {validate_event_category('unknown')}")
-    print(f"  validate_stance('positive')              → {validate_stance('positive')}")
-    print(f"  validate_stance('bad')                   → {validate_stance('bad')}")
+    print(f"  validate_event_category('Earnings')                    → {validate_event_category('Earnings')}")
+    print(f"  validate_event_category('Macroeconomic_Geopolitical')  → {validate_event_category('Macroeconomic_Geopolitical')}")
+    print(f"  validate_event_category('unknown')                     → {validate_event_category('unknown')}")
+    print(f"  validate_stance('bullish')                             → {validate_stance('bullish')}")
+    print(f"  validate_stance('bad')                                 → {validate_stance('bad')}")
