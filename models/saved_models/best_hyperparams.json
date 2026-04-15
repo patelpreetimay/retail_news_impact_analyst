@@ -1,0 +1,31 @@
+{
+  "event": {
+    "best_params": {
+      "ngram_max": 1,
+      "max_features": 10000,
+      "min_df": 2,
+      "max_df": 0.9278832326735555,
+      "sublinear_tf": true,
+      "C": 1.1137288809215082,
+      "class_weight": null
+    },
+    "best_macro_f1": 0.7147,
+    "n_trials": 200
+  },
+  "stance": {
+    "best_params": {
+      "ngram_max": 2,
+      "max_features": 15000,
+      "min_df": 4,
+      "max_df": 0.9491301608914464,
+      "sublinear_tf": false,
+      "C": 7.328847670948926,
+      "class_weight": "balanced"
+    },
+    "best_macro_f1": 0.6685,
+    "n_trials": 200
+  },
+  "text_features": {
+    "headline_weight": 3
+  }
+}

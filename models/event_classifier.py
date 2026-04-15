@@ -5,14 +5,14 @@ event_classifier.py — TF-IDF + Logistic Regression Event Classifier for RNIA
 Trains and uses a TF-IDF + Logistic Regression pipeline to classify news
 articles into one of seven financial event categories.
 
-Event Categories:
+Event Categories (7 — consolidated):
     1. Earnings
     2. Leadership_Change
     3. Regulatory_Action
     4. Mergers_Acquisitions
     5. Legal_Action
     6. Product_Announcement
-    7. Market_Movement
+    7. Market_Movement  (includes Macroeconomic, Market Sentiment, Other)
 
 Usage:
     # Training
@@ -31,8 +31,10 @@ Usage:
 
 import os
 import sys
+import re
 import logging
 
+import numpy as np
 import joblib
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
@@ -74,21 +76,26 @@ class EventClassifierLR:
         Whether the model has been trained or loaded.
     """
 
+    # Minimum confidence to trust a prediction (else → "unclassified")
+    CONFIDENCE_THRESHOLD = 0.35
+    # Minimum word count for meaningful classification
+    MIN_WORDS = 5
+
     def __init__(self):
         """Initialise the event classifier with default hyperparameters."""
         self.vectorizer = TfidfVectorizer(
-            max_features=5000,       # Limit vocabulary size
+            max_features=10000,      # Larger vocabulary for better coverage
             ngram_range=(1, 2),      # Unigrams and bigrams
             stop_words="english",    # Remove common English stop words
-            min_df=1,                # Minimum document frequency
-            max_df=1.0,              # Accept all terms (supports small datasets)
+            min_df=2,                # Require term in at least 2 docs (noise filter)
+            max_df=0.95,             # Ignore terms in >95% of docs (too generic)
             sublinear_tf=True,       # Apply sublinear TF scaling
         )
         self.classifier = LogisticRegression(
-            max_iter=1000,           # Ensure convergence
-            multi_class="multinomial",
+            max_iter=2000,           # Ensure convergence
             solver="lbfgs",
-            C=1.0,                   # Regularisation strength
+            C=1.0,                   # Balanced regularisation
+            class_weight="balanced", # Handle class imbalance automatically
             random_state=42,
         )
         self.is_trained = False
@@ -128,7 +135,15 @@ class EventClassifierLR:
 
     # ----- Prediction -------------------------------------------------------
 
-    def predict_event(self, text: str) -> str:
+    @staticmethod
+    def _is_meaningful_text(text: str, min_words: int = 5) -> bool:
+        """Return True if *text* contains enough real words for classification."""
+        if not text or not isinstance(text, str):
+            return False
+        words = re.findall(r"[a-zA-Z]{2,}", text)
+        return len(words) >= min_words
+
+    def predict_event(self, text: str, strict: bool = False) -> str:
         """
         Predict the event category for a single article text.
 
@@ -136,22 +151,41 @@ class EventClassifierLR:
         ----------
         text : str
             Cleaned article text.
+        strict : bool
+            If True, apply input-quality and confidence checks —
+            returns ``"unclassified"`` for gibberish or low-confidence
+            inputs.  Use ``strict=True`` for live user input via the API.
+            Default is False (pipeline / evaluation mode).
 
         Returns
         -------
         str
-            Predicted event category label (e.g. ``"earnings"``).
-
-        Raises
-        ------
-        RuntimeError
-            If the model has not been trained or loaded.
+            Predicted event category label, or ``"unclassified"`` when
+            *strict* is True and the input fails validation.
         """
         if not self.is_trained:
             raise RuntimeError(
                 "Model not trained. Call train_event_classifier() or load_model() first."
             )
+
+        if strict:
+            # Reject gibberish / too-short input
+            if not self._is_meaningful_text(text, self.MIN_WORDS):
+                return "unclassified"
+
         X_tfidf = self.vectorizer.transform([text])
+
+        if strict:
+            # Check if the text produced any known TF-IDF features
+            if X_tfidf.nnz == 0:
+                return "unclassified"
+
+            # Confidence check
+            probas = self.classifier.predict_proba(X_tfidf)[0]
+            max_prob = float(np.max(probas))
+            if max_prob < self.CONFIDENCE_THRESHOLD:
+                return "unclassified"
+
         prediction = self.classifier.predict(X_tfidf)
         return prediction[0]
 
@@ -174,7 +208,7 @@ class EventClassifierLR:
         X_tfidf = self.vectorizer.transform([text])
         probas = self.classifier.predict_proba(X_tfidf)[0]
         classes = self.classifier.classes_
-        return {cls: round(prob, 4) for cls, prob in zip(classes, probas)}
+        return {str(cls): float(f"{float(prob):.4f}") for cls, prob in zip(classes, probas)}
 
     # ----- Save / Load -------------------------------------------------------
 

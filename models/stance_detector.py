@@ -25,8 +25,10 @@ Usage:
 
 import os
 import sys
+import re
 import logging
 
+import numpy as np
 import joblib
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
@@ -47,8 +49,8 @@ SAVED_MODELS_DIR = os.path.join(PROJECT_ROOT, "models", "saved_models")
 STANCE_CLF_PATH = os.path.join(SAVED_MODELS_DIR, "stance_detector.pkl")
 TFIDF_STANCE_PATH = os.path.join(SAVED_MODELS_DIR, "tfidf_stance_vectorizer.pkl")
 
-# Valid stance labels
-STANCE_LABELS = ["positive", "negative", "neutral"]
+# Valid stance labels (V2 market-oriented, 3-class — mixed collapsed into neutral)
+STANCE_LABELS = ["bullish", "bearish", "neutral"]
 
 
 class StanceDetectorLR:
@@ -67,21 +69,26 @@ class StanceDetectorLR:
         Whether the model has been trained or loaded.
     """
 
+    # Minimum confidence to trust a prediction (else → "neutral")
+    CONFIDENCE_THRESHOLD = 0.45
+    # Minimum word count for meaningful stance detection
+    MIN_WORDS = 5
+
     def __init__(self):
         """Initialise the stance detector with default hyperparameters."""
         self.vectorizer = TfidfVectorizer(
-            max_features=5000,       # Limit vocabulary size
+            max_features=10000,      # Larger vocabulary for better coverage
             ngram_range=(1, 2),      # Unigrams and bigrams
             stop_words="english",    # Remove common English stop words
-            min_df=1,                # Minimum document frequency
-            max_df=1.0,              # Accept all terms (supports small datasets)
+            min_df=2,                # Require term in at least 2 docs (noise filter)
+            max_df=0.95,             # Ignore terms in >95% of docs (too generic)
             sublinear_tf=True,       # Apply sublinear TF scaling
         )
         self.classifier = LogisticRegression(
-            max_iter=1000,           # Ensure convergence
-            multi_class="multinomial",
+            max_iter=2000,           # Ensure convergence
             solver="lbfgs",
-            C=1.0,                   # Regularisation strength
+            C=1.0,                   # Balanced regularisation
+            class_weight="balanced", # Handle class imbalance automatically
             random_state=42,
         )
         self.is_trained = False
@@ -122,7 +129,15 @@ class StanceDetectorLR:
 
     # ----- Prediction -------------------------------------------------------
 
-    def predict_stance(self, text: str) -> str:
+    @staticmethod
+    def _is_meaningful_text(text: str, min_words: int = 5) -> bool:
+        """Return True if *text* contains enough real words for classification."""
+        if not text or not isinstance(text, str):
+            return False
+        words = re.findall(r"[a-zA-Z]{2,}", text)
+        return len(words) >= min_words
+
+    def predict_stance(self, text: str, strict: bool = False) -> str:
         """
         Predict the stance for a single article text.
 
@@ -130,23 +145,41 @@ class StanceDetectorLR:
         ----------
         text : str
             Cleaned article text.
+        strict : bool
+            If True, apply input-quality and confidence checks —
+            returns ``"neutral"`` for gibberish or low-confidence
+            inputs.  Use ``strict=True`` for live user input via the API.
+            Default is False (pipeline / evaluation mode).
 
         Returns
         -------
         str
             Predicted stance label (``"positive"``, ``"negative"``,
             or ``"neutral"``).
-
-        Raises
-        ------
-        RuntimeError
-            If the model has not been trained or loaded.
         """
         if not self.is_trained:
             raise RuntimeError(
                 "Model not trained. Call train_stance_model() or load_model() first."
             )
+
+        if strict:
+            # Reject gibberish / too-short input
+            if not self._is_meaningful_text(text, self.MIN_WORDS):
+                return "neutral"
+
         X_tfidf = self.vectorizer.transform([text])
+
+        if strict:
+            # Check if the text produced any known TF-IDF features
+            if X_tfidf.nnz == 0:
+                return "neutral"
+
+            # Confidence check
+            probas = self.classifier.predict_proba(X_tfidf)[0]
+            max_prob = float(np.max(probas))
+            if max_prob < self.CONFIDENCE_THRESHOLD:
+                return "neutral"
+
         prediction = self.classifier.predict(X_tfidf)
         return prediction[0]
 
