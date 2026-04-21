@@ -3,13 +3,14 @@ impact_score.py — Impact Scoring Engine for RNIA
 =================================================
 
 Calculates an overall impact score for each financial news event based on
-three equally-weighted components:
+stable importance plus smooth recency decay:
 
-    impact_score = 0.4 × credibility + 0.3 × recency + 0.3 × materiality
+    base_importance = 0.6 * materiality + 0.4 * credibility
+    impact_score = base_importance * (0.5 + 0.5 * recency)
 
 Components:
     1. **Credibility**  — Source reliability (Reuters > CNBC > Yahoo Finance)
-    2. **Recency**       — Time decay (more recent articles score higher)
+    2. **Recency**       — Smooth time decay (more recent articles score higher)
     3. **Materiality**   — Event-type importance (Earnings > Product Announcement)
 
 Score Range: 0.0 – 1.0
@@ -18,8 +19,8 @@ Usage:
     # Single article
     >>> from scoring.impact_score import calculate_impact_score
     >>> result = calculate_impact_score("Reuters", "2026-03-13T10:00:00", "earnings")
-    >>> print(result)
-    {'impact_score': 0.92, 'credibility': 0.95, 'recency': 1.0, 'materiality': 0.95}
+    >>> sorted(result)
+    ['credibility', 'impact_score', 'materiality', 'recency']
 
     # Batch processing
     >>> from scoring.impact_score import process_dataset
@@ -29,7 +30,9 @@ Usage:
 import os
 import sys
 import logging
-from datetime import datetime, timedelta
+import math
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 
 import pandas as pd
 
@@ -47,10 +50,18 @@ logger = logging.getLogger(__name__)
 # WEIGHT CONFIGURATION
 # ===========================================================================
 
-# Formula weights (must sum to 1.0)
+# Base importance weights. Recency is applied as a multiplier so stale news
+# visibly fades instead of only losing a small additive component.
+WEIGHT_MATERIALITY = 0.6
 WEIGHT_CREDIBILITY = 0.4
-WEIGHT_RECENCY = 0.3
-WEIGHT_MATERIALITY = 0.3
+
+# Smooth recency decay:
+#   recency = floor + (1 - floor) * 2 ** (-age_hours / half_life_hours)
+# Approximate curve: 1 hour=0.99, 1 day=0.72, 1 week=0.13, 1 month=0.05.
+RECENCY_HALF_LIFE_HOURS = 48.0
+RECENCY_FLOOR = 0.05
+DEFAULT_RECENCY = 0.5
+RECENCY_MULTIPLIER_FLOOR = 0.5
 
 
 # ===========================================================================
@@ -59,12 +70,26 @@ WEIGHT_MATERIALITY = 0.3
 
 # Source reliability scores (0.0 – 1.0)
 SOURCE_CREDIBILITY = {
-    "reuters":          0.95,
-    "financial times":  0.92,
-    "cnbc":             0.90,
-    "marketwatch":      0.88,
-    "yahoo finance":    0.85,
-    "investing.com":    0.80,
+    # Global sources
+    "reuters":               0.95,
+    "wall street journal":   0.94,
+    "wsj":                   0.94,
+    "bloomberg":             0.93,
+    "financial times":       0.92,
+    "cnbc":                  0.90,
+    "marketwatch":           0.88,
+    "yahoo finance":         0.85,
+    "investing.com":         0.80,
+    # Indian sources
+    "economic times":        0.90,
+    "moneycontrol":          0.88,
+    "livemint":              0.88,
+    "hindu businessline":    0.88,
+    "ndtv profit":           0.86,
+    "cnbctv18":              0.86,
+    "business today":        0.84,
+    "zee business":          0.82,
+    "investing india":       0.80,
 }
 
 # Default credibility for unknown sources
@@ -114,45 +139,25 @@ def calculate_credibility(source: str) -> float:
 # STEP 3 — RECENCY SCORE
 # ===========================================================================
 
-def calculate_recency(timestamp: str) -> float:
-    """
-    Calculate the recency score based on the article's publication timestamp.
+def _parse_timestamp(timestamp: str | datetime) -> datetime | None:
+    """Parse common ISO/RSS timestamp formats into a datetime object."""
+    if isinstance(timestamp, datetime):
+        return timestamp
 
-    More recent articles receive higher scores, reflecting their greater
-    relevance to current market conditions.
+    if (
+        not timestamp
+        or not isinstance(timestamp, str)
+        or timestamp.strip().lower() in ("nan", "nat", "none", "")
+    ):
+        return None
 
-    Scoring tiers:
-        - Published today (< 24h)   → 1.0
-        - 1–2 days old               → 0.8
-        - 3–7 days old               → 0.6
-        - Older than 7 days          → 0.4
+    raw = timestamp.strip()
+    iso = raw[:-1] + "+00:00" if raw.endswith("Z") else raw
+    try:
+        return datetime.fromisoformat(iso)
+    except ValueError:
+        pass
 
-    Parameters
-    ----------
-    timestamp : str
-        Publication timestamp in ISO-like format
-        (e.g. ``"2026-03-13T10:00:00"`` or ``"2026-03-13 10:00:00"``).
-
-    Returns
-    -------
-    float
-        Recency score between 0.4 and 1.0.
-
-    Examples
-    --------
-    >>> calculate_recency("2026-03-13T08:00:00")  # today
-    1.0
-    >>> calculate_recency("2026-03-01T08:00:00")  # old
-    0.4
-    """
-    if not timestamp or not isinstance(timestamp, str):
-        return 0.4  # Default for missing timestamps
-
-    # Parse the timestamp string
-    now = datetime.now()
-    parsed = None
-
-    # Try multiple common date formats
     formats = [
         "%Y-%m-%dT%H:%M:%S",
         "%Y-%m-%d %H:%M:%S",
@@ -163,31 +168,55 @@ def calculate_recency(timestamp: str) -> float:
     ]
     for fmt in formats:
         try:
-            parsed = datetime.strptime(timestamp.strip(), fmt)
-            # Strip timezone info for comparison
-            parsed = parsed.replace(tzinfo=None)
-            break
+            return datetime.strptime(raw, fmt)
         except ValueError:
             continue
 
+    try:
+        return parsedate_to_datetime(raw)
+    except (TypeError, ValueError):
+        return None
+
+
+def calculate_recency(timestamp: str | datetime, now: datetime | None = None) -> float:
+    """
+    Calculate a smooth recency score from the publication timestamp.
+
+    The score follows a 48-hour half-life and bottoms out at 0.05:
+    1 hour ~= 0.99, 1 day ~= 0.72, 1 week ~= 0.13, 1 month ~= 0.05.
+    Missing or unparseable timestamps return a neutral default of 0.5.
+    """
+    if (
+        not timestamp
+        or (
+            isinstance(timestamp, str)
+            and timestamp.strip().lower() in ("nan", "nat", "none", "")
+        )
+    ):
+        return DEFAULT_RECENCY
+
+    parsed = _parse_timestamp(timestamp)
     if parsed is None:
-        logger.warning("Could not parse timestamp: %s — using default recency.", timestamp)
-        return 0.4
+        logger.warning("Could not parse timestamp: %s â€” using default recency.", timestamp)
+        return DEFAULT_RECENCY
 
-    # Calculate age in days
-    assert parsed is not None  # guaranteed by the None check above
-    age = now - parsed
-    days_old = age.total_seconds() / 86400  # Convert to fractional days
-
-    # Assign recency tier
-    if days_old < 1:
-        return 1.0     # Published today (within 24 hours)
-    elif days_old <= 2:
-        return 0.8     # 1–2 days old
-    elif days_old <= 7:
-        return 0.6     # 3–7 days old
+    if parsed.tzinfo is not None:
+        current = now or datetime.now(timezone.utc)
+        if current.tzinfo is None:
+            current = current.replace(tzinfo=timezone.utc)
+        age = current.astimezone(timezone.utc) - parsed.astimezone(timezone.utc)
     else:
-        return 0.4     # Older than 7 days
+        current = now or datetime.now()
+        if current.tzinfo is not None:
+            current = current.astimezone().replace(tzinfo=None)
+        age = current - parsed
+
+    age_hours = max(0.0, age.total_seconds() / 3600.0)
+    recency = RECENCY_FLOOR + (1.0 - RECENCY_FLOOR) * math.pow(
+        0.5,
+        age_hours / RECENCY_HALF_LIFE_HOURS,
+    )
+    return round(float(max(0.0, min(1.0, recency))), 4)
 
 
 # ===========================================================================
@@ -196,13 +225,18 @@ def calculate_recency(timestamp: str) -> float:
 
 # Event-type importance weights (0.0 – 1.0)
 EVENT_MATERIALITY = {
-    "earnings":              0.95,
-    "mergers_acquisitions":  0.90,
-    "regulatory_action":     0.85,
-    "leadership_change":     0.75,
-    "legal_action":          0.70,
-    "product_announcement":  0.65,
-    "market_movement":       0.60,
+    "earnings":                          0.95,
+    "mergers_acquisitions":              0.90,
+    "macroeconomic_geopolitical":        0.90,
+    "regulatory_action":                 0.85,
+    "market_sentiment_investor_action":  0.80,
+    "leadership_change":                 0.75,
+    "legal_action":                      0.70,
+    "product_announcement":              0.65,
+    "other":                             0.55,
+    # Legacy V1 names (backward compat)
+    "market_movement":                   0.60,
+    "unclassified":                      0.30,
 }
 
 # Default materiality for unknown event types
@@ -244,6 +278,34 @@ def calculate_materiality(event_type: str) -> float:
 # STEP 5 — FINAL IMPACT SCORE
 # ===========================================================================
 
+def calculate_impact_from_components(
+    materiality: float,
+    credibility: float,
+    recency: float,
+) -> float:
+    """
+    Compose final impact from stable importance and live recency.
+
+    Formula:
+        impact = (0.6 * materiality + 0.4 * credibility)
+                 * (0.5 + 0.5 * recency)
+    """
+    materiality = float(max(0.0, min(1.0, materiality)))
+    credibility = float(max(0.0, min(1.0, credibility)))
+    recency = float(max(0.0, min(1.0, recency)))
+
+    base_importance = (
+        WEIGHT_MATERIALITY * materiality
+        + WEIGHT_CREDIBILITY * credibility
+    )
+    freshness_multiplier = (
+        RECENCY_MULTIPLIER_FLOOR
+        + (1.0 - RECENCY_MULTIPLIER_FLOOR) * recency
+    )
+    impact_score = base_importance * freshness_multiplier
+    return round(float(max(0.0, min(1.0, impact_score))), 4)
+
+
 def calculate_impact_score(
     source: str,
     timestamp: str,
@@ -253,7 +315,8 @@ def calculate_impact_score(
     Calculate the final weighted impact score for a news article.
 
     Formula:
-        ``impact_score = 0.4 × credibility + 0.3 × recency + 0.3 × materiality``
+        ``impact_score = (0.6 × materiality + 0.4 × credibility)
+        × (0.5 + 0.5 × recency)``
 
     Parameters
     ----------
@@ -276,29 +339,25 @@ def calculate_impact_score(
     Examples
     --------
     >>> result = calculate_impact_score("Reuters", "2026-03-13T10:00:00", "earnings")
-    >>> print(f"Impact: {result['impact_score']:.2f}")
-    Impact: 0.97
+    >>> 0.0 <= result["impact_score"] <= 1.0
+    True
     """
     # Calculate each component
     credibility = calculate_credibility(source)
     recency = calculate_recency(timestamp)
     materiality = calculate_materiality(event_type)
 
-    # Weighted combination
-    impact_score = (
-        WEIGHT_CREDIBILITY * credibility
-        + WEIGHT_RECENCY * recency
-        + WEIGHT_MATERIALITY * materiality
+    impact_score = calculate_impact_from_components(
+        materiality=materiality,
+        credibility=credibility,
+        recency=recency,
     )
 
-    # Clamp to [0, 1] (should already be in range, but just in case)
-    impact_score = float(max(0.0, min(1.0, impact_score)))
-
     return {
-        "impact_score": round(impact_score, 4),
-        "credibility": round(credibility, 4),
-        "recency": round(recency, 4),
-        "materiality": round(materiality, 4),
+        "impact_score": round(float(impact_score), 4),
+        "credibility": round(float(credibility), 4),
+        "recency": round(float(recency), 4),
+        "materiality": round(float(materiality), 4),
     }
 
 
