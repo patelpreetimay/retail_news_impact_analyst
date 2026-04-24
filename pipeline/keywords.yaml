@@ -1,0 +1,631 @@
+# pipeline/keywords.yaml
+# ----------------------------------------------------------------------------
+# Curated relevance vocabulary for the deterministic Stage-1 keyword filter.
+#
+# An article is RELEVANT if it mentions ANY term from any list below
+# (case-insensitive, whole-word match for short tokens; substring for
+# multi-word phrases).  Loaded by pipeline/run.py._load_keyword_pattern().
+#
+# Categories
+#   sectors          — broad GICS-ish industry words
+#   regulators       — global + India regulator / policy bodies
+#   indices          — major equity / commodity indices
+#   india_companies  — top NSE/BSE issuers (~120 names)
+#   global_companies — top global tickers / mega-caps (~80 names)
+#   event_keywords   — generic financial-event vocabulary
+#   macro_keywords   — macroeconomic / geopolitical signals
+# ----------------------------------------------------------------------------
+
+sectors:
+  - banking
+  - banks
+  - bank
+  - financial services
+  - insurance
+  - asset management
+  - mutual fund
+  - fintech
+  - pharma
+  - pharmaceutical
+  - pharmaceuticals
+  - biotech
+  - healthcare
+  - hospital
+  - life sciences
+  - it services
+  - software
+  - saas
+  - cloud computing
+  - semiconductor
+  - chipmaker
+  - hardware
+  - cybersecurity
+  - automobile
+  - automotive
+  - automaker
+  - electric vehicle
+  - ev maker
+  - airlines
+  - airline
+  - aviation
+  - shipping
+  - logistics
+  - oil and gas
+  - oil & gas
+  - petroleum
+  - refinery
+  - renewable energy
+  - solar
+  - wind power
+  - power sector
+  - utilities
+  - telecom
+  - telecommunications
+  - real estate
+  - realty
+  - housing market
+  - property market
+  - infrastructure
+  - construction
+  - cement
+  - steel
+  - metals
+  - mining
+  - fmcg
+  - consumer goods
+  - retailer
+  - e-commerce
+  - quick commerce
+  - hospitality
+  - media
+  - entertainment industry
+  - defense industry
+  - defence sector
+  - chemicals
+  - fertiliser
+  - fertilizer
+  - paints
+  - textile
+  - apparel
+  - jewellery industry
+
+regulators:
+  - sebi
+  - rbi
+  - reserve bank of india
+  - irdai
+  - trai
+  - cci
+  - competition commission
+  - nclt
+  - nclat
+  - ed
+  - enforcement directorate
+  - cbdt
+  - cbic
+  - finance ministry
+  - ministry of finance
+  - niti aayog
+  - mca
+  - ministry of corporate affairs
+  - sec
+  - securities and exchange commission
+  - federal reserve
+  - the fed
+  - fed
+  - fdic
+  - ftc
+  - federal trade commission
+  - cftc
+  - fda
+  - ecb
+  - european central bank
+  - bank of england
+  - boj
+  - bank of japan
+  - pboc
+  - imf
+  - world bank
+  - opec
+  - bis
+
+indices:
+  - sensex
+  - nifty
+  - nifty 50
+  - nifty50
+  - bank nifty
+  - nifty bank
+  - nifty it
+  - nifty pharma
+  - nifty auto
+  - midcap
+  - smallcap
+  - dow jones
+  - s&p 500
+  - sp500
+  - nasdaq
+  - russell 2000
+  - ftse
+  - dax
+  - cac
+  - nikkei
+  - hang seng
+  - shanghai composite
+
+india_companies:
+  - reliance
+  - reliance industries
+  - tcs
+  - tata consultancy
+  - infosys
+  - hdfc bank
+  - icici bank
+  - kotak mahindra
+  - axis bank
+  - sbi
+  - state bank of india
+  - hdfc
+  - bajaj finance
+  - bajaj finserv
+  - bajaj auto
+  - bajaj
+  - bharti airtel
+  - airtel
+  - jio
+  - reliance jio
+  - itc
+  - hindustan unilever
+  - hul
+  - asian paints
+  - berger paints
+  - nestle india
+  - britannia
+  - dabur
+  - marico
+  - godrej
+  - colgate
+  - larsen and toubro
+  - l&t
+  - ultratech
+  - shree cement
+  - ambuja
+  - acc
+  - jsw steel
+  - tata steel
+  - sail
+  - hindalco
+  - vedanta
+  - coal india
+  - ntpc
+  - power grid
+  - tata power
+  - adani
+  - adani green
+  - adani ports
+  - adani enterprises
+  - adani power
+  - adani transmission
+  - adani total gas
+  - ongc
+  - ioc
+  - indian oil
+  - bpcl
+  - hpcl
+  - gail
+  - sun pharma
+  - dr reddy
+  - cipla
+  - lupin
+  - aurobindo
+  - divis lab
+  - biocon
+  - apollo hospitals
+  - max healthcare
+  - fortis
+  - maruti suzuki
+  - mahindra and mahindra
+  - tata motors
+  - hero motocorp
+  - tvs motor
+  - eicher motors
+  - ashok leyland
+  - bharat forge
+  - mrf
+  - apollo tyres
+  - ola electric
+  - ola
+  - zomato
+  - swiggy
+  - paytm
+  - one97 communications
+  - policybazaar
+  - pb fintech
+  - nykaa
+  - delhivery
+  - dmart
+  - avenue supermarts
+  - trent
+  - titan
+  - vbl
+  - varun beverages
+  - irctc
+  - indigo
+  - interglobe aviation
+  - spicejet
+  - vodafone idea
+  - vi
+  - persistent systems
+  - mphasis
+  - lti
+  - ltimindtree
+  - hcl
+  - hcl tech
+  - tech mahindra
+  - wipro
+  - mindtree
+  - coforge
+  - bel
+  - bharat electronics
+  - hal
+  - hindustan aeronautics
+  - bhel
+  - cochin shipyard
+  - mazagon dock
+  - upl
+  - pi industries
+  - jindal steel
+  - tata chemicals
+  - srf
+  - pidilite
+  - bhel
+  - jio financial
+  - jiofin
+
+global_companies:
+  - apple
+  - microsoft
+  - alphabet
+  - google
+  - amazon
+  - meta
+  - facebook
+  - nvidia
+  - tesla
+  - berkshire hathaway
+  - jpmorgan
+  - jp morgan
+  - bank of america
+  - goldman sachs
+  - morgan stanley
+  - wells fargo
+  - citigroup
+  - blackrock
+  - blackstone
+  - kkr
+  - apollo global
+  - visa
+  - mastercard
+  - paypal
+  - american express
+  - exxon
+  - chevron
+  - shell
+  - bp
+  - totalenergies
+  - saudi aramco
+  - pfizer
+  - merck
+  - johnson & johnson
+  - eli lilly
+  - novo nordisk
+  - astrazeneca
+  - roche
+  - novartis
+  - sanofi
+  - intel
+  - amd
+  - tsmc
+  - taiwan semiconductor
+  - asml
+  - qualcomm
+  - broadcom
+  - oracle
+  - salesforce
+  - adobe
+  - cisco
+  - ibm
+  - sap
+  - palantir
+  - openai
+  - anthropic
+  - mistral
+  - super micro
+  - smci
+  - boeing
+  - airbus
+  - lockheed martin
+  - raytheon
+  - rtx
+  - general electric
+  - general motors
+  - ford motor
+  - stellantis
+  - volkswagen
+  - bmw
+  - mercedes-benz
+  - toyota
+  - honda
+  - byd
+  - alibaba
+  - tencent
+  - baidu
+  - jd.com
+  - pinduoduo
+  - samsung
+  - sony
+  - lvmh
+  - hermes
+  - mcdonald
+  - starbucks
+  - costco
+  - walmart
+  - target
+  - home depot
+  - moderna
+  - biontech
+
+event_keywords:
+  # earnings / financials
+  - earnings
+  - quarterly results
+  - q1 results
+  - q2 results
+  - q3 results
+  - q4 results
+  - half-year results
+  - annual results
+  - revenue
+  - profit
+  - net profit
+  - net loss
+  - operating profit
+  - ebitda
+  - eps
+  - earnings per share
+  - guidance
+  - outlook
+  - dividend
+  - bonus issue
+  - share buyback
+  - stock split
+  # M&A
+  - merger
+  - acquisition
+  - takeover
+  - buyout
+  - tender offer
+  - open offer
+  - stake sale
+  - divestment
+  - demerger
+  - spinoff
+  - spin-off
+  - joint venture
+  # leadership
+  - ceo
+  - cfo
+  - coo
+  - chairman
+  - managing director
+  - resignation
+  - resigns
+  - appointed
+  - steps down
+  - successor
+  - board reshuffle
+  # product / regulation
+  - product launch
+  - new product
+  - regulatory approval
+  - drug approval
+  - clinical trial
+  - patent
+  - rate decision
+  - rate hike
+  - rate cut
+  - repo rate
+  - monetary policy
+  - fiscal policy
+  - tariff
+  - sanctions
+  - trade deal
+  - export ban
+  - import duty
+  - subsidy
+  - tax cut
+  - tax hike
+  - gst
+  - union budget
+  # legal
+  - lawsuit
+  - litigation
+  - court ruling
+  - settlement
+  - investigation
+  - probe
+  - fraud
+  - penalty
+  - fine
+  - antitrust
+  - class action
+  # markets
+  - ipo
+  - listing
+  - delisting
+  - stock surge
+  - stock plunge
+  - 52-week high
+  - 52-week low
+  - circuit breaker
+  - trading halt
+  - block deal
+  - bulk deal
+  - bond yield
+  - credit rating
+  - downgrade
+  - upgrade
+  - rating
+
+macro_keywords:
+  - inflation
+  - cpi
+  - wpi
+  - pmi
+  - gdp
+  - gdp growth
+  - recession
+  - stagflation
+  - unemployment rate
+  - jobless
+  - payrolls
+  - consumer confidence
+  - retail sales
+  - industrial production
+  - manufacturing
+  - housing starts
+  - trade balance
+  - current account
+  - fiscal deficit
+  - foreign exchange reserves
+  - forex reserves
+  - rupee
+  - dollar
+  - euro
+  - yen
+  - currency
+  - crude oil
+  - oil price
+  - gold price
+  - silver price
+  - bullion
+  - commodity prices
+  - war
+  - ceasefire
+  - peace talks
+  - diplomatic
+  - hormuz
+  - red sea
+  - opec+
+  - geopolitical
+
+# ----------------------------------------------------------------------------
+# Round-2 additions (boost relevance recall, target false negatives)
+# ----------------------------------------------------------------------------
+price_action:
+  - shares rise
+  - shares rose
+  - shares jump
+  - shares jumped
+  - shares fall
+  - shares fell
+  - shares plunge
+  - shares plunged
+  - shares slide
+  - shares surge
+  - shares surged
+  - stock rises
+  - stock falls
+  - stock surges
+  - stock plunges
+  - stock jumps
+  - stock soars
+  - stock tumbles
+  - stock rallied
+  - rally
+  - rallied
+  - midday gains
+  - midday losses
+  - posting gains
+  - posting losses
+  - close higher
+  - close lower
+  - hits new high
+  - hits 52-week high
+  - record high
+  - record low
+  - bid for
+  - bidding for
+  - takeover bid
+  - takeover talk
+  - in talks to acquire
+  - report of bid
+  - reports moncler
+  - report says
+  - rumored acquisition
+
+commodity_extras:
+  - soybeans
+  - soybean
+  - corn
+  - wheat
+  - cotton
+  - sugar
+  - coffee
+  - cocoa
+  - copper
+  - aluminium
+  - aluminum
+  - zinc
+  - nickel
+  - palladium
+  - platinum
+  - lithium
+  - rare earth
+  - bean oil
+  - palm oil
+  - natural gas
+  - lng
+  - lpg
+  - rice
+  - paddy
+  - mustard
+  - jowar
+  - bajra
+  - pulses
+  - urea
+  - phosphate
+  - dap fertilizer
+  - kharif
+  - rabi
+  - msp
+  - minimum support price
+  - food security
+  - foodgrain
+  - procurement
+  - public distribution
+
+india_govt_political_economic:
+  - madhya pradesh
+  - mp government
+  - shivraj singh chouhan
+  - state government
+  - chief minister
+  - cm office
+  - state cabinet
+  - lok sabha
+  - rajya sabha
+  - parliament
+  - finance minister
+  - commerce minister
+  - agriculture ministry
+  - food ministry
+  - power ministry
+  - state-owned
+  - psu
+  - public sector undertaking
+  - nabard
+  - reserves
+  - subvention
+  - msme
+  - micro small medium enterprises
