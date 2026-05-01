@@ -2,9 +2,23 @@ feedparser
 requests
 beautifulsoup4
 pandas
+numpy
 lxml
 streamlit
 plotly
 scikit-learn
 joblib
 matplotlib
+nltk
+spacy
+fastapi
+uvicorn
+pydantic
+imbalanced-learn
+optuna
+# FinBERT comparison baseline (evaluation/finbert_comparison.py)
+# Also used by the hybrid event classifier (TF-IDF + FinBERT embeddings + LR)
+transformers
+torch
+# XGBoost event classifier (models/event_classifier_xgb.py — opt-in)
+xgboost
